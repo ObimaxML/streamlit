@@ -1,14 +1,8 @@
-# sales_dashboard_all.py
+# sales_dashboard_st_charts.py
 import streamlit as st
 import pandas as pd
 import numpy as np
-# import matplotlib.pyplot as plt
-from docx import Document
-from docx.shared import Inches, Pt
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-from docx.oxml.ns import qn
 import io
-import os
 
 st.set_page_config(page_title="PepsiCo Campaign Analysis Dashboard - 14 May 2025 to 14 August 2025", layout="wide")
 
@@ -40,34 +34,6 @@ def human_currency(num):
         return f'R{num/1_000:.0f}K'
     else:
         return f'R{num:.0f}'
-
-def add_bolded_paragraph(doc, bold_text, normal_text):
-    p = doc.add_paragraph()
-    run = p.add_run(bold_text)
-    run.bold = True
-    run.font.name = 'Aptos'
-    run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-    run.font.size = Pt(9)
-    run2 = p.add_run(normal_text)
-    run2.font.name = 'Aptos'
-    run2._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-    run2.font.size = Pt(9)
-    return p
-
-def save_fig_to_bytes(fig, fmt="png", dpi=300):
-    buf = io.BytesIO()
-    fig.savefig(buf, format=fmt, dpi=dpi, bbox_inches='tight')
-    buf.seek(0)
-    return buf
-
-def doc_style_setup(doc):
-    try:
-        style = doc.styles['Normal']
-        style.font.name = 'Aptos'
-        style.font.size = Pt(9)
-        style._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-    except Exception:
-        pass
 
 # ---------------- YOY Analysis ----------------
 def yoy_analysis_page():
@@ -105,53 +71,21 @@ def yoy_analysis_page():
     total_growth = (total_campaign - total_prior) / total_prior if total_prior != 0 else np.nan
 
     # Chart 1: YOY pct change
-    products = df['Product Description']
-    increases = df['Increase in sales from Prior Year AVE']
-    colors = ['green' if x > 0 else 'red' for x in increases]
-    yoy_pct = increases * 100
-
-    fig1, ax1 = plt.subplots(figsize=(12, 6), constrained_layout=True)
-    bars = ax1.bar(products, yoy_pct, color=colors)
-    ax1.set_ylabel('Increase in Sales from Prior Year (%)')
-    ax1.set_title('YOY Sales Change by Product')
-    ax1.tick_params(axis='x', rotation=90)
-    label_margin = max(2, abs(yoy_pct.max()) * 0.04)
-    ymax = yoy_pct.max() + label_margin
-    ymin = min(0, yoy_pct.min())
-    ax1.set_ylim(ymin, ymax + label_margin * 1.5)
-    for bar, value in zip(bars, yoy_pct):
-        label = f"{value:.1f}%"
-        label_y = bar.get_height() + label_margin * 0.7
-        ax1.text(bar.get_x() + bar.get_width()/2, label_y, label, ha='center', va='bottom', fontsize=8, color='black', clip_on=False)
-    st.pyplot(fig1)
-
+    chart_data1 = pd.DataFrame({
+        'Product': df['Product Description'],
+        'Increase (%)': df['Increase in sales from Prior Year AVE'] * 100
+    })
+    st.subheader("YOY Sales Change by Product")
+    st.bar_chart(chart_data1.set_index('Product'), height=500)
+    
     # Chart 2: Prior vs Campaign volumes
-    x = np.arange(len(products))
-    width = 0.35
-    prior = df['QTY Sold Prior Year']
-    campaign = df['QTY Sold CAMPAIGN PERIOD']
-
-    fig2, ax2 = plt.subplots(figsize=(12, 6), constrained_layout=True)
-    bars1 = ax2.bar(x - width/2, prior, width, label='Prior Year', color='lightgray')
-    bars2 = ax2.bar(x + width/2, campaign, width, label='Campaign Period', color='royalblue')
-    ax2.set_ylabel('Quantity Sold')
-    ax2.set_title('YOY Sales Comparison by Product')
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(products, rotation=90)
-    ax2.legend()
-    all_heights = np.concatenate([prior.values, campaign.values])
-    label_margin2 = max(2000, all_heights.max() * 0.04)
-    ymax2 = all_heights.max() + label_margin2
-    ax2.set_ylim(0, ymax2 + label_margin2 * 1.5)
-    for i, bar in enumerate(bars1):
-        value = prior.iloc[i]
-        label_y = bar.get_height() + label_margin2 * 0.7
-        ax2.text(bar.get_x() + bar.get_width()/2, label_y, human_format(value), ha='center', va='bottom', fontsize=8, color='black', clip_on=False)
-    for i, bar in enumerate(bars2):
-        value = campaign.iloc[i]
-        label_y = bar.get_height() + label_margin2 * 0.7
-        ax2.text(bar.get_x() + bar.get_width()/2, label_y, human_format(value), ha='center', va='bottom', fontsize=8, color='black', clip_on=False)
-    st.pyplot(fig2)
+    chart_data2 = pd.DataFrame({
+        'Product': df['Product Description'],
+        'Prior Year': df['QTY Sold Prior Year'],
+        'Campaign Period': df['QTY Sold CAMPAIGN PERIOD']
+    })
+    st.subheader("YOY Sales Comparison by Product")
+    st.bar_chart(chart_data2.set_index('Product'), height=500)
 
     # Key insights display
     st.subheader("Key Findings")
@@ -160,104 +94,10 @@ def yoy_analysis_page():
     st.markdown(f"- Top decliner: **{top_decliner['Product Description']}** ({top_decliner['Increase in sales from Prior Year AVE']:.2%}).")
     st.markdown(f"- Total prior: {human_format(total_prior)} → Total campaign: {human_format(total_campaign)} ({total_growth:.2%}).")
 
-    # Generate DOCX
-    if st.button("Generate YOY Executive Summary (.docx)"):
-        try:
-            # Save figs to bytes
-            img1 = save_fig_to_bytes(fig1)
-            img2 = save_fig_to_bytes(fig2)
-
-            doc = Document()
-            doc_style_setup(doc)
-            title = doc.add_heading('Executive Summary', 0)
-            title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-            subtitle = doc.add_paragraph('Year-on-Year Sales Analysis')
-            subtitle.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-            for run in subtitle.runs:
-                run.font.size = Pt(14)
-                run.font.name = 'Aptos'
-                run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            intro = (
-                "This executive summary provides a concise overview of key findings from the year-on-year (YOY) sales analysis. "
-                "The analysis compares product sales between the prior year and the recent campaign period, highlighting significant trends and changes in performance metrics."
-            )
-            p_intro = doc.add_paragraph(intro)
-            for run in p_intro.runs:
-                run.font.name = 'Aptos'
-                run.font.size = Pt(9)
-                run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            # Key Findings
-            doc.add_heading('Key Findings', level=1)
-            key_findings = [
-                f"• Out of {len(df)} products analyzed, {increase_count} showed an increase in sales, while {decrease_count} experienced a decline during the campaign period compared to the prior year.",
-                f"• The average change in sales across all products was {avg_increase:.2%}.",
-                f"• The product with the highest sales growth was {top_grower['Product Description']} with a {top_grower['Increase in sales from Prior Year AVE']:.2%} increase.",
-                f"• The product with the largest decline was {top_decliner['Product Description']} with a {top_decliner['Increase in sales from Prior Year AVE']:.2%} decrease.",
-                f"• Overall, total sales increased from {human_format(total_prior)} units in the prior year to {human_format(total_campaign)} units in the campaign period, representing a total growth of {total_growth:.2%}."
-            ]
-            for finding in key_findings:
-                p = doc.add_paragraph(finding)
-                for run in p.runs:
-                    run.font.name = 'Aptos'
-                    run.font.size = Pt(9)
-                    run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            # Charts
-            doc.add_heading('YOY Sales Change by Product', level=1)
-            doc.add_picture(img1, width=Inches(6))
-            explanation_chart1 = [
-                ("Observations: ", f"This chart displays YOY % change. {increase_count} products grew, {decrease_count} declined. Top grower: {top_grower['Product Description']}."),
-                ("Interpretation: ", f"Green bars indicate positive momentum; red indicate decline. Avg change: {avg_increase:.1%}."),
-                ("Opportunities: ", "Sustain successful tactics and investigate declines.")
-            ]
-            for bold, normal in explanation_chart1:
-                add_bolded_paragraph(doc, bold, " " + normal)
-            doc.add_paragraph()
-
-            doc.add_heading('YOY Sales Comparison by Product', level=1)
-            doc.add_picture(img2, width=Inches(6))
-            explanation_chart2 = [
-                ("Observations: ", f"Prior vs campaign volumes. Top campaign product: {df.iloc[df['QTY Sold CAMPAIGN PERIOD'].idxmax()]['Product Description']}."),
-                ("Interpretation: ", "Higher campaign volumes indicate campaign impact."),
-                ("Opportunities: ", "Replicate successful campaign tactics.")
-            ]
-            for bold, normal in explanation_chart2:
-                add_bolded_paragraph(doc, bold, " " + normal)
-            doc.add_paragraph()
-
-            doc.add_heading('Summary', level=1)
-            p_summary = doc.add_paragraph(
-                "Overall positive trend observed. Focus on sustaining momentum for high performers and diagnose declines for targeted interventions."
-            )
-            for run in p_summary.runs:
-                run.font.name = 'Aptos'
-                run.font.size = Pt(9)
-                run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-
-            # Output docx to BytesIO and provide download
-            doc_io = io.BytesIO()
-            doc.save(doc_io)
-            doc_io.seek(0)
-            st.success("YOY executive summary ready.")
-            st.download_button(
-                label="Download YOY Executive Summary (.docx)",
-                data=doc_io.getvalue(),
-                file_name="YOY_Executive_Summary.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-        except Exception as e:
-            st.error(f"Failed to generate YOY document: {e}")
-
 # ---------------- Prior Periods ----------------
 def prior_periods_page():
     st.header("Campaign Prior Periods Analysis")
     
-
     # Read Excel
     try:
         df = pd.read_excel('Prior Periods.xlsx', header=1)
@@ -284,34 +124,13 @@ def prior_periods_page():
         return
 
     # Chart 1
-    x = np.arange(len(df['Product Description']))
-    width = 0.35
-    campaign_vals = df[col_campaign] / 10000 if col_campaign else np.zeros(len(df))
-    avg_prior_vals = df['Avg Prior Months'] / 10000
-
-    fig1, ax1 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    bars1 = ax1.bar(x - width/2, campaign_vals, width, label='Campaign Period Sales')
-    bars2 = ax1.bar(x + width/2, avg_prior_vals, width, label='Avg of Prior Months')
-    ax1.set_ylabel('Quantity Sold (10,000s)')
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(df['Product Description'], rotation=90)
-    ax1.legend()
-    
-    # Fix: Convert to numpy arrays before using flatten
-    all_heights = np.concatenate([campaign_vals.values, avg_prior_vals.values])
-    max_height = all_heights.max() if len(all_heights)>0 else 0
-    ymax = max_height * 1.12 if max_height>0 else 1
-    ax1.set_ylim(0, ymax)
-    
-    for i, bar in enumerate(bars1):
-        value = df[col_campaign].iloc[i] if col_campaign else np.nan
-        label_y = bar.get_height() + ymax * 0.01
-        ax1.text(bar.get_x() + bar.get_width()/2, label_y, human_format(value), ha='center', va='bottom', fontsize=8, color='black', clip_on=True)
-    for i, bar in enumerate(bars2):
-        value = df['Avg Prior Months'].iloc[i]
-        label_y = bar.get_height() + ymax * 0.01
-        ax1.text(bar.get_x() + bar.get_width()/2, label_y, human_format(value), ha='center', va='bottom', fontsize=8, color='black', clip_on=True)
-    st.pyplot(fig1)
+    chart_data1 = pd.DataFrame({
+        'Product': df['Product Description'],
+        'Campaign Period Sales': df[col_campaign] if col_campaign else 0,
+        'Avg of Prior Months': df['Avg Prior Months']
+    })
+    st.subheader("Campaign Period Sales vs. Average of Prior Months")
+    st.bar_chart(chart_data1.set_index('Product'), height=500)
 
     # Key findings for Chart 1
     st.subheader("Key Findings - Campaign vs Prior Average")
@@ -322,28 +141,12 @@ def prior_periods_page():
     st.markdown(f"- Focus on replicating successful tactics and investigating underperformers.")
 
     # Chart 2: increase %
-    increase_pct = df[col_increase] * 100 if col_increase else np.zeros(len(df))
-    colors = ['green' if v >= 0 else 'red' for v in increase_pct]
-
-    fig2, ax2 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    bars = ax2.bar(df['Product Description'], increase_pct, color=colors)
-    ax2.set_ylabel('Sales Increase (%)')
-    ax2.set_title('Sales Increase During Campaign vs. Avg of Prior Months')
-    ax2.tick_params(axis='x', rotation=90)
-    ymin = min(0, np.nanmin(increase_pct)) if len(increase_pct)>0 else 0
-    ymax = max(0, np.nanmax(increase_pct)) if len(increase_pct)>0 else 0
-    y_range = ymax - ymin if (ymax - ymin) != 0 else 1
-    ax2.set_ylim(ymin - y_range * 0.12, ymax + y_range * 0.12)
-    for bar, value in zip(bars, increase_pct):
-        label = f'{value:.1f}%'
-        if value >= 0:
-            label_y = value + y_range * 0.01
-            va = 'bottom'
-        else:
-            label_y = value - y_range * 0.01
-            va = 'top'
-        ax2.text(bar.get_x() + bar.get_width()/2, label_y, label, ha='center', va=va, fontsize=8, clip_on=True)
-    st.pyplot(fig2)
+    chart_data2 = pd.DataFrame({
+        'Product': df['Product Description'],
+        'Sales Increase (%)': df[col_increase] * 100 if col_increase else 0
+    })
+    st.subheader("Sales Increase During Campaign vs. Avg of Prior Months")
+    st.bar_chart(chart_data2.set_index('Product'), height=500)
 
     # Key findings
     increase_count = (df[col_increase] > 0).sum() if col_increase else 0
@@ -351,8 +154,6 @@ def prior_periods_page():
     avg_increase = df[col_increase].mean() if col_increase else np.nan
     top_grower = df.loc[df[col_increase].idxmax()] if col_increase else None
     top_decliner = df.loc[df[col_increase].idxmin()] if col_increase else None
-    top_campaign = df.iloc[df[col_campaign].idxmax()] if col_campaign else None
-    top_avg_prior = df.iloc[df['Avg Prior Months'].idxmax()] if 'Avg Prior Months' in df.columns else None
 
     st.subheader("Key Findings - Sales Increase Analysis")
     st.markdown(f"- {increase_count} products increased vs avg prior months, {decrease_count} decreased.")
@@ -361,83 +162,6 @@ def prior_periods_page():
     st.markdown(f"- {increase_count} products experienced growth, while {decrease_count} declined.")
     st.markdown(f"- Green bars indicate positive campaign impact.")
     st.markdown(f"- Focus on doubling down on growth products.")
-
-    # Generate DOCX
-    if st.button("Generate Prior Periods Summary (.docx)"):
-        try:
-            img1 = save_fig_to_bytes(fig1)
-            img2 = save_fig_to_bytes(fig2)
-
-            doc = Document()
-            doc_style_setup(doc)
-            title = doc.add_heading('Executive Summary: Prior Periods Analysis', 0)
-            title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-
-            intro = (
-                "This executive summary provides a concise overview of key findings from the campaign sales analysis. "
-                "The analysis compares product sales during the campaign period to the average of prior months."
-            )
-            p_intro = doc.add_paragraph(intro)
-            for run in p_intro.runs:
-                run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            doc.add_heading('Key Findings', level=1)
-            key_findings = [
-                f"- Out of {len(df)} products analyzed, {increase_count} showed an increase in sales during the campaign period compared to the average of prior months, while {decrease_count} experienced a decline.",
-                f"- The average change in sales across all products was {avg_increase:.2%}." if not pd.isna(avg_increase) else ""
-            ]
-            for finding in key_findings:
-                if finding:
-                    p = doc.add_paragraph(finding)
-                    for run in p.runs:
-                        run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            doc.add_heading('Campaign Period Sales vs. Average of Prior Months', level=1)
-            doc.add_picture(img1, width=Inches(6))
-            expl1 = [
-                ("Observations: ",
-                 f"{len(products_above_avg)} out of {len(df)} products achieved higher sales during the campaign than their prior average."),
-                ("Interpretation: ", "Products above average likely benefited from campaign activities."),
-                ("Opportunities: ", "Replicate successful tactics and investigate underperformers.")
-            ]
-            for bold, normal in expl1:
-                add_bolded_paragraph(doc, bold, " " + normal)
-            doc.add_paragraph()
-
-            doc.add_heading('Sales Increase During Campaign vs. Avg of Prior Months', level=1)
-            doc.add_picture(img2, width=Inches(6))
-            expl2 = [
-                ("Observations: ", f"{increase_count} products experienced growth, while {decrease_count} declined."),
-                ("Interpretation: ", "Green bars indicate positive campaign impact."),
-                ("Opportunities: ", "Double down on growth products.")
-            ]
-            for bold, normal in expl2:
-                add_bolded_paragraph(doc, bold, " " + normal)
-            doc.add_paragraph()
-
-            doc.add_heading('Summary', level=1)
-            summary_text = (
-                "The data indicates a generally positive trend in sales performance during the campaign period. "
-                "Stakeholders should focus on sustaining the momentum for top-performing products while investigating the causes behind declining products."
-            )
-            p_summary = doc.add_paragraph(summary_text)
-            for run in p_summary.runs:
-                run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-
-            doc_io = io.BytesIO()
-            doc.save(doc_io); doc_io.seek(0)
-            st.success("Prior Periods summary generated.")
-            st.download_button(
-                label="Download Prior Periods Summary (.docx)",
-                data=doc_io.getvalue(),
-                file_name="Prior_Periods_Summary.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-
-        except Exception as e:
-            st.error(f"Failed to generate Prior Periods document: {e}")
 
 # ---------------- Category Analysis ----------------
 def category_analysis_page():
@@ -465,59 +189,32 @@ def category_analysis_page():
     }
     df = pd.DataFrame(data)
 
-    x = np.arange(len(df["Product Description"]))
-    width = 0.35
-
     # Chart 1
-    fig1, ax1 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    bars1 = ax1.bar(x - width/2, df["PepsiCo Campaign Category Share"]*100, width, label='PepsiCo', color='royalblue')
-    bars2 = ax1.bar(x + width/2, df["Competitor Category Share"]*100, width, label='Competitors', color='lightgray')
-    ax1.set_ylabel('Category Share (%)')
-    ax1.set_title('Category Share During Campaign Period by Product')
-    ax1.set_xticks(x); ax1.set_xticklabels(df["Product Description"], rotation=90)
-    ax1.set_ylim(0,100)
-    ax1.legend()
-    for bar in bars1:
-        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1, f"{bar.get_height():.0f}%", ha='center', va='bottom', fontsize=8)
-    for bar in bars2:
-        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1, f"{bar.get_height():.0f}%", ha='center', va='bottom', fontsize=8)
-    st.pyplot(fig1)
+    chart_data1 = pd.DataFrame({
+        'Product': df["Product Description"],
+        'PepsiCo': df["PepsiCo Campaign Category Share"] * 100,
+        'Competitors': df["Competitor Category Share"] * 100
+    })
+    st.subheader("Category Share During Campaign Period by Product")
+    st.bar_chart(chart_data1.set_index('Product'), height=500)
 
     # Chart 2
-    fig2, ax2 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    bars = ax2.bar(x, df["Pre-Campaign PepsiCo"]*100, width=0.5, label='Pre-Campaign PepsiCo', color='royalblue')
-    ax2.set_ylabel('Pre-Campaign PepsiCo Share (%)')
-    ax2.set_title('Pre-Campaign PepsiCo Share by Product')
-    ax2.set_xticks(x); ax2.set_xticklabels(df["Product Description"], rotation=90)
-    ymax = (df["Pre-Campaign PepsiCo"]*100).max() + 15
-    ax2.set_ylim(0, ymax)
-    for i, bar in enumerate(bars):
-        bar_height = bar.get_height()
-        pct_change = df["% Change"].iloc[i] * 100
-        ax2.text(bar.get_x() + bar.get_width()/2, bar_height/2, f"{pct_change:+.0f}%", ha='center', va='center', fontsize=10, color='white', fontweight='bold')
-        ax2.text(bar.get_x() + bar.get_width()/2, bar_height + 1, f"{bar_height:.0f}%", ha='center', va='bottom', fontsize=8, color='black')
-    st.pyplot(fig2)
+    chart_data2 = pd.DataFrame({
+        'Product': df["Product Description"],
+        'Pre-Campaign PepsiCo Share (%)': df["Pre-Campaign PepsiCo"] * 100
+    })
+    st.subheader("Pre-Campaign PepsiCo Share by Product")
+    st.bar_chart(chart_data2.set_index('Product'), height=500)
 
     # Chart 3
-    fig3, ax3 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    width3 = 0.2
-    bars_campaign = ax3.bar(x - width3*1.5, df["PepsiCo Campaign Category Share"]*100, width3, label='PepsiCo (Campaign)', color='royalblue')
-    bars_pre = ax3.bar(x - width3/2, df["Pre-Campaign PepsiCo"]*100, width3, label='PepsiCo (Pre-Campaign)', color='deepskyblue')
-    bars_comp = ax3.bar(x + width3/2, df["Competitor Category Share"]*100, width3, label='Competitor (Campaign)', color='lightgray')
-    ax3.set_ylabel('Category Share (%)'); ax3.set_title('Category Share Comparison by Product (Campaign vs Pre-Campaign)')
-    ax3.set_xticks(x); ax3.set_xticklabels(df["Product Description"], rotation=90)
-    all_heights = np.concatenate([
-        df["PepsiCo Campaign Category Share"]*100,
-        df["Pre-Campaign PepsiCo"]*100,
-        df["Competitor Category Share"]*100
-    ])
-    ymax = all_heights.max() + 12
-    ax3.set_ylim(0, ymax)
-    for bars in [bars_campaign, bars_pre, bars_comp]:
-        for bar in bars:
-            ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1, f"{bar.get_height():.0f}%", ha='center', va='bottom', fontsize=8)
-    ax3.legend()
-    st.pyplot(fig3)
+    chart_data3 = pd.DataFrame({
+        'Product': df["Product Description"],
+        'PepsiCo (Campaign)': df["PepsiCo Campaign Category Share"] * 100,
+        'PepsiCo (Pre-Campaign)': df["Pre-Campaign PepsiCo"] * 100,
+        'Competitor (Campaign)': df["Competitor Category Share"] * 100
+    })
+    st.subheader("Category Share Comparison by Product (Campaign vs Pre-Campaign)")
+    st.bar_chart(chart_data3.set_index('Product'), height=500)
 
     # Key findings
     top_gain = df.iloc[df["% Change"].idxmax()]
@@ -530,69 +227,6 @@ def category_analysis_page():
     st.subheader("Key Findings")
     st.markdown(f"- PepsiCo avg share {avg_pepsico_share:.0%}, competitors {avg_competitor_share:.0%}.")
     st.markdown(f"- {num_gain} products increased share, {num_loss} decreased. Largest gain: **{top_gain['Product Description']}**.")
-
-    if st.button("Generate Category Share Executive Summary (.docx)"):
-        try:
-            img1 = save_fig_to_bytes(fig1)
-            img2 = save_fig_to_bytes(fig2)
-            img3 = save_fig_to_bytes(fig3)
-
-            doc = Document(); doc_style_setup(doc)
-            title = doc.add_heading('Executive Summary: Category Share Analysis', 0)
-            title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-            intro = (
-                "This executive summary provides a concise overview of key findings from the category share analysis. "
-                "The analysis compares PepsiCo and competitor category shares during the campaign period."
-            )
-            p_intro = doc.add_paragraph(intro)
-            for run in p_intro.runs:
-                run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            doc.add_heading('Key Findings', level=1)
-            kfs = [
-                f"• PepsiCo's average category share during the campaign was {avg_pepsico_share:.0%}, compared to competitors' {avg_competitor_share:.0%}.",
-                f"• {num_gain} products increased their PepsiCo category share during the campaign, while {num_loss} saw a decrease.",
-                f"• The largest gain in share was for {top_gain['Product Description']} (+{top_gain['% Change']:.0%}), while the largest loss was for {top_loss['Product Description']} ({top_loss['% Change']:.0%})."
-            ]
-            for finding in kfs:
-                p = doc.add_paragraph(finding)
-                for run in p.runs:
-                    run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            doc.add_heading('Category Share During Campaign Period', level=1)
-            doc.add_picture(img1, width=Inches(6))
-            add_bolded_paragraph(doc, "Observations: ", f"PepsiCo held an average share of {avg_pepsico_share:.0%}.")
-            doc.add_paragraph()
-
-            doc.add_heading('Pre-Campaign PepsiCo Share', level=1)
-            doc.add_picture(img2, width=Inches(6))
-            add_bolded_paragraph(doc, "Observations: ", "Pre-campaign baseline and % change are shown on the bars.")
-            doc.add_paragraph()
-
-            doc.add_heading('Category Share Comparison (Campaign vs Pre-Campaign)', level=1)
-            doc.add_picture(img3, width=Inches(6))
-            add_bolded_paragraph(doc, "Observations: ", f"{num_gain} products improved PepsiCo share vs pre-campaign.")
-            doc.add_paragraph()
-
-            doc.add_heading('Summary', level=1)
-            p_summary = doc.add_paragraph(
-                "PepsiCo maintained a strong category share in most products during the campaign period. Focus on sustaining growth where observed."
-            )
-            for run in p_summary.runs:
-                run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-
-            doc_io = io.BytesIO(); doc.save(doc_io); doc_io.seek(0)
-            st.success("Category Share summary generated.")
-            st.download_button(
-                "Download Category Share Executive Summary (.docx)",
-                data=doc_io.getvalue(),
-                file_name="Category_Share_Executive_Summary.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-        except Exception as e:
-            st.error(f"Failed to generate Category document: {e}")
 
 # ---------------- Campaign Units Analysis ----------------
 def campaign_units_page():
@@ -620,25 +254,15 @@ def campaign_units_page():
     }
     df = pd.DataFrame(data)
 
-    x = np.arange(len(df["Product Description"]))
-    width = 0.25
-
     # Chart 1
-    fig1, ax1 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    bars_pre = ax1.bar(x - width, df["Pre-Campaign Units (6wks)"], width, label='Pre-Campaign', color='lightgray')
-    bars_camp = ax1.bar(x, df["Campaign Units/Week"], width, label='Campaign', color='royalblue')
-    bars_post = ax1.bar(x + width, df["Post-Campaign Units/Week"], width, label='Post-Campaign', color='deepskyblue')
-    ax1.set_ylabel('Units Sold')
-    ax1.set_title('Units Sold per Product: Pre-, During-, and Post-Campaign')
-    ax1.set_xticks(x); ax1.set_xticklabels(df["Product Description"], rotation=90)
-    ax1.legend()
-    all_heights = np.concatenate([df["Pre-Campaign Units (6wks)"].values, df["Campaign Units/Week"].values, df["Post-Campaign Units/Week"].values])
-    ymax = all_heights.max() * 1.15
-    ax1.set_ylim(0, ymax)
-    for bars in [bars_pre, bars_camp, bars_post]:
-        for bar in bars:
-            ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + ymax*0.01, human_format(bar.get_height()), ha='center', va='bottom', fontsize=8)
-    st.pyplot(fig1)
+    chart_data1 = pd.DataFrame({
+        'Product': df["Product Description"],
+        'Pre-Campaign': df["Pre-Campaign Units (6wks)"],
+        'Campaign': df["Campaign Units/Week"],
+        'Post-Campaign': df["Post-Campaign Units/Week"]
+    })
+    st.subheader("Units Sold per Product: Pre-, During-, and Post-Campaign")
+    st.bar_chart(chart_data1.set_index('Product'), height=500)
 
     # Key findings for Chart 1
     st.subheader("Key Findings - Units Sold Comparison")
@@ -647,22 +271,12 @@ def campaign_units_page():
     st.markdown(f"- Focus on strategies to extend the positive effects of campaigns.")
 
     # Chart 2
-    fig2, ax2 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    colors = ['green' if v >= 0 else 'red' for v in df["% Change (Campaign vs Pre)"]]
-    bars = ax2.bar(df["Product Description"], np.array(df["% Change (Campaign vs Pre)"])*100, color=colors)
-    ax2.set_ylabel('% Change (Campaign vs Pre)')
-    ax2.set_title('% Change in Units Sold: Campaign vs Pre-Campaign')
-    ax2.tick_params(axis='x', rotation=90)
-    ymin = min(0, (np.array(df["% Change (Campaign vs Pre)"])*100).min())
-    ymax = max(0, (np.array(df["% Change (Campaign vs Pre)"])*100).max())
-    y_range = ymax - ymin if (ymax - ymin) != 0 else 1
-    ax2.set_ylim(ymin - y_range*0.12, ymax + y_range*0.12)
-    for bar, value in zip(bars, np.array(df["% Change (Campaign vs Pre)"])*100):
-        label = f'{value:.0f}%'
-        label_y = value + y_range*0.01 if value >= 0 else value - y_range*0.01
-        va = 'bottom' if value >= 0 else 'top'
-        ax2.text(bar.get_x() + bar.get_width()/2, label_y, label, ha='center', va=va, fontsize=8)
-    st.pyplot(fig2)
+    chart_data2 = pd.DataFrame({
+        'Product': df["Product Description"],
+        '% Change (Campaign vs Pre)': df["% Change (Campaign vs Pre)"] * 100
+    })
+    st.subheader("% Change in Units Sold: Campaign vs Pre-Campaign")
+    st.bar_chart(chart_data2.set_index('Product'), height=500)
 
     # Key findings for Chart 2
     st.subheader("Key Findings - Campaign vs Pre-Campaign")
@@ -674,22 +288,12 @@ def campaign_units_page():
     st.markdown(f"- Replicate successful tactics from top-performing products like {top_gain_pre['Product Description']}.")
 
     # Chart 3
-    fig3, ax3 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    colors = ['green' if v >= 0 else 'red' for v in df["% Change (Campaign vs Post)"]]
-    bars = ax3.bar(df["Product Description"], np.array(df["% Change (Campaign vs Post)"])*100, color=colors)
-    ax3.set_ylabel('% Change (Campaign vs Post)')
-    ax3.set_title('% Change in Units Sold: Campaign vs Post-Campaign')
-    ax3.tick_params(axis='x', rotation=45)
-    ymin = min(0, (np.array(df["% Change (Campaign vs Post)"])*100).min())
-    ymax = max(0, (np.array(df["% Change (Campaign vs Post)"])*100).max())
-    y_range = ymax - ymin if (ymax - ymin) != 0 else 1
-    ax3.set_ylim(ymin - y_range*0.12, ymax + y_range*0.12)
-    for bar, value in zip(bars, np.array(df["% Change (Campaign vs Post)"])*100):
-        label = f'{value:.0f}%'
-        label_y = value + y_range*0.01 if value >= 0 else value - y_range*0.01
-        va = 'bottom' if value >= 0 else 'top'
-        ax3.text(bar.get_x() + bar.get_width()/2, label_y, label, ha='center', va=va, fontsize=8)
-    st.pyplot(fig3)
+    chart_data3 = pd.DataFrame({
+        'Product': df["Product Description"],
+        '% Change (Campaign vs Post)': df["% Change (Campaign vs Post)"] * 100
+    })
+    st.subheader("% Change in Units Sold: Campaign vs Post-Campaign")
+    st.bar_chart(chart_data3.set_index('Product'), height=500)
 
     # Key findings
     num_gain_post = (df["% Change (Campaign vs Post)"] > 0).sum()
@@ -708,82 +312,6 @@ def campaign_units_page():
     st.subheader("Summary Findings")
     st.markdown(f"- Campaign period drove higher weekly sales for most products, but these gains were not always sustained post-campaign.")
     st.markdown(f"- Focus on strategies to extend the positive effects of campaigns beyond the campaign period.")
-
-    if st.button("Generate Units Executive Summary (.docx)"):
-        try:
-            img1 = save_fig_to_bytes(fig1)
-            img2 = save_fig_to_bytes(fig2)
-            img3 = save_fig_to_bytes(fig3)
-
-            doc = Document(); doc_style_setup(doc)
-            title = doc.add_heading('Executive Summary: Pre-, During-, and Post-Campaign Units Analysis', 0)
-            title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-            intro = (
-                "This executive summary provides a concise overview of key findings from the units analysis before, during, and after the campaign."
-            )
-            p_intro = doc.add_paragraph(intro)
-            for run in p_intro.runs:
-                run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            doc.add_heading('Key Findings', level=1)
-            kfs = [
-                f"• Most products saw an increase in weekly units sold during the campaign compared to the pre-campaign period.",
-                f"• The largest campaign gain was for {df.iloc[df['% Change (Campaign vs Pre)'].idxmax()]['Product Description']} (+{df['% Change (Campaign vs Pre)'].max():.0%})."
-            ]
-            for finding in kfs:
-                p = doc.add_paragraph(finding)
-                for run in p.runs:
-                    run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            doc.add_heading('Units Sold per Product: Pre-, During-, and Post-Campaign', level=1)
-            doc.add_picture(img1, width=Inches(6))
-            for bold, normal in [
-                ("Observations: ", "This chart compares units sold per product before, during, and after the campaign."),
-                ("Interpretation: ", "Campaign period generally drove higher weekly sales across the portfolio."),
-                ("Opportunities: ", "Focus on strategies to extend the positive effects of campaigns.")
-            ]:
-                add_bolded_paragraph(doc, bold, " " + normal)
-            doc.add_paragraph()
-
-            doc.add_heading('% Change in Units Sold: Campaign vs Pre-Campaign', level=1)
-            doc.add_picture(img2, width=Inches(6))
-            for bold, normal in [
-                ("Observations: ", f"{num_gain_pre} products experienced an increase in units sold during the campaign compared to pre-campaign."),
-                ("Interpretation: ", "Products with strong positive change likely benefited from campaign activities."),
-                ("Opportunities: ", "Replicate successful tactics from top-performing products.")
-            ]:
-                add_bolded_paragraph(doc, bold, " " + normal)
-            doc.add_paragraph()
-
-            doc.add_heading('% Change in Units Sold: Campaign vs Post-Campaign', level=1)
-            doc.add_picture(img3, width=Inches(6))
-            for bold, normal in [
-                ("Observations: ", f"{num_gain_post} products maintained or increased sales post-campaign compared to the campaign period."),
-                ("Interpretation: ", "Most products saw a drop in sales after the campaign."),
-                ("Opportunities: ", "Develop post-campaign plans to sustain gains.")
-            ]:
-                add_bolded_paragraph(doc, bold, " " + normal)
-            doc.add_paragraph()
-
-            doc.add_heading('Summary', level=1)
-            p_summary = doc.add_paragraph(
-                "Campaign period drove higher weekly sales for most products, but these gains were not always sustained post-campaign."
-            )
-            for run in p_summary.runs:
-                run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-
-            doc_io = io.BytesIO(); doc.save(doc_io); doc_io.seek(0)
-            st.success("Units executive summary ready.")
-            st.download_button(
-                "Download Units Executive Summary (.docx)",
-                data=doc_io.getvalue(),
-                file_name="Pre_During_Post_Campaign_Executive_Summary.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-        except Exception as e:
-            st.error(f"Failed to generate Units document: {e}")
 
 # ---------------- Campaign Sales Amount Analysis ----------------
 def campaign_sales_amount_page():
@@ -823,25 +351,15 @@ def campaign_sales_amount_page():
     }
     df = pd.DataFrame(data)
 
-    x = np.arange(len(df["Product Description"]))
-    width = 0.35
-
     # Chart 1
-    fig1, ax1 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    bars_pre = ax1.bar(x - width, df["Pre-Campaign Sales (6wks)"], width, label='Pre-Campaign', color='lightgray')
-    bars_camp = ax1.bar(x, df["Campaign Sales/Week"], width, label='Campaign', color='royalblue')
-    bars_post = ax1.bar(x + width, df["Post-Campaign Sales/Week"], width, label='Post-Campaign', color='deepskyblue')
-    ax1.set_ylabel('Sales Amount (ZAR)')
-    ax1.set_title('Sales Amount per Product: Pre-, During-, and Post-Campaign')
-    ax1.set_xticks(x); ax1.set_xticklabels(df["Product Description"], rotation=90)
-    ax1.legend()
-    all_heights = np.concatenate([df["Pre-Campaign Sales (6wks)"].values, df["Campaign Sales/Week"].values, df["Post-Campaign Sales/Week"].values])
-    ymax = all_heights.max() * 1.18
-    ax1.set_ylim(0, ymax)
-    for bars in [bars_pre, bars_camp, bars_post]:
-        for bar in bars:
-            ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + ymax*0.01, human_currency(bar.get_height()), ha='center', va='bottom', fontsize=8, rotation=90)
-    st.pyplot(fig1)
+    chart_data1 = pd.DataFrame({
+        'Product': df["Product Description"],
+        'Pre-Campaign': df["Pre-Campaign Sales (6wks)"],
+        'Campaign': df["Campaign Sales/Week"],
+        'Post-Campaign': df["Post-Campaign Sales/Week"]
+    })
+    st.subheader("Sales Amount per Product: Pre-, During-, and Post-Campaign")
+    st.bar_chart(chart_data1.set_index('Product'), height=500)
 
     # Key findings for Chart 1
     st.subheader("Key Findings - Sales Amount Comparison")
@@ -850,22 +368,12 @@ def campaign_sales_amount_page():
     st.markdown(f"- Focus on strategies to extend the positive effects of campaigns.")
 
     # Chart 2
-    fig2, ax2 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    colors = ['green' if v >= 0 else 'red' for v in df["% Change (Campaign vs Pre)"]]
-    bars = ax2.bar(df["Product Description"], np.array(df["% Change (Campaign vs Pre)"])*100, color=colors)
-    ax2.set_ylabel('% Change (Campaign vs Pre Sales)')
-    ax2.set_title('% Change in Sales Amount: Campaign vs Pre-Campaign')
-    ax2.tick_params(axis='x', rotation=90)
-    ymin = min(0, (np.array(df["% Change (Campaign vs Pre)"])*100).min())
-    ymax = max(0, (np.array(df["% Change (Campaign vs Pre)"])*100).max())
-    y_range = ymax - ymin if (ymax - ymin) != 0 else 1
-    ax2.set_ylim(ymin - y_range*0.12, ymax + y_range*0.12)
-    for bar, value in zip(bars, np.array(df["% Change (Campaign vs Pre)"])*100):
-        label = f'{value:.0f}%'
-        label_y = value + (y_range*0.01 if value >= 0 else -y_range*0.01)
-        va = 'bottom' if value >= 0 else 'top'
-        ax2.text(bar.get_x() + bar.get_width()/2, label_y, label, ha='center', va=va, fontsize=8)
-    st.pyplot(fig2)
+    chart_data2 = pd.DataFrame({
+        'Product': df["Product Description"],
+        '% Change (Campaign vs Pre Sales)': df["% Change (Campaign vs Pre)"] * 100
+    })
+    st.subheader("% Change in Sales Amount: Campaign vs Pre-Campaign")
+    st.bar_chart(chart_data2.set_index('Product'), height=500)
 
     # Key findings for Chart 2
     st.subheader("Key Findings - Campaign vs Pre-Campaign Sales")
@@ -876,22 +384,12 @@ def campaign_sales_amount_page():
     st.markdown(f"- Replicate successful tactics from top-performing products like {top_gain_pre['Product Description']}.")
 
     # Chart 3
-    fig3, ax3 = plt.subplots(figsize=(12,6), constrained_layout=True)
-    colors = ['green' if v >= 0 else 'red' for v in df["% Change (Campaign vs Post)"]]
-    bars = ax3.bar(df["Product Description"], np.array(df["% Change (Campaign vs Post)"])*100, color=colors)
-    ax3.set_ylabel('% Change (Campaign vs Post Sales)')
-    ax3.set_title('% Change in Sales Amount: Campaign vs Post-Campaign')
-    ax3.tick_params(axis='x', rotation=90)
-    ymin = min(0, (np.array(df["% Change (Campaign vs Post)"])*100).min())
-    ymax = max(0, (np.array(df["% Change (Campaign vs Post)"])*100).max())
-    y_range = ymax - ymin if (ymax - ymin) != 0 else 1
-    ax3.set_ylim(ymin - y_range*0.12, ymax + y_range*0.12)
-    for bar, value in zip(bars, np.array(df["% Change (Campaign vs Post)"])*100):
-        label = f'{value:.0f}%'
-        label_y = value + (y_range*0.01 if value >= 0 else -y_range*0.01)
-        va = 'bottom' if value >= 0 else 'top'
-        ax3.text(bar.get_x() + bar.get_width()/2, label_y, label, ha='center', va=va, fontsize=8)
-    st.pyplot(fig3)
+    chart_data3 = pd.DataFrame({
+        'Product': df["Product Description"],
+        '% Change (Campaign vs Post Sales)': df["% Change (Campaign vs Post)"] * 100
+    })
+    st.subheader("% Change in Sales Amount: Campaign vs Post-Campaign")
+    st.bar_chart(chart_data3.set_index('Product'), height=500)
 
     # Key findings
     num_gain_post = (df["% Change (Campaign vs Post)"] > 0).sum()
@@ -904,64 +402,6 @@ def campaign_sales_amount_page():
     st.subheader("Summary Findings")
     st.markdown(f"- Campaign increased sales for many products but not all gains were sustained post-campaign.")
     st.markdown(f"- Focus on strategies to extend the positive effects of campaigns beyond the campaign period.")
-
-    if st.button("Generate Sales Amount Executive Summary (.docx)"):
-        try:
-            img1 = save_fig_to_bytes(fig1)
-            img2 = save_fig_to_bytes(fig2)
-            img3 = save_fig_to_bytes(fig3)
-
-            doc = Document(); doc_style_setup(doc)
-            title = doc.add_heading('Executive Summary: Pre-, During-, and Post-Campaign Sales Amount Analysis', 0)
-            title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-            intro = (
-                "This executive summary provides a concise overview of key findings from the sales amount analysis before, during, and after the campaign."
-            )
-            p_intro = doc.add_paragraph(intro)
-            for run in p_intro.runs:
-                run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            doc.add_heading('Key Findings', level=1)
-            kfs = [
-                f"• Most products saw an increase in weekly sales amount during the campaign compared to the pre-campaign period.",
-                f"• The largest campaign gain was for {df.iloc[df['% Change (Campaign vs Pre)'].idxmax()]['Product Description']} (+{df['% Change (Campaign vs Pre)'].max():.0%})."
-            ]
-            for finding in kfs:
-                p = doc.add_paragraph(finding)
-                for run in p.runs:
-                    run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-
-            doc.add_heading('Sales Amount per Product: Pre-, During-, and Post-Campaign', level=1)
-            doc.add_picture(img1, width=Inches(6))
-            add_bolded_paragraph(doc, "Observations: ", "Most products saw a notable increase in sales during the campaign compared to the pre-campaign period.")
-            doc.add_paragraph()
-
-            doc.add_heading('% Change in Sales Amount: Campaign vs Pre-Campaign', level=1)
-            doc.add_picture(img2, width=Inches(6))
-            add_bolded_paragraph(doc, "Observations: ", f"{num_gain_pre} products experienced an increase in sales amount during the campaign compared to pre-campaign.")
-            doc.add_paragraph()
-
-            doc.add_heading('% Change in Sales Amount: Campaign vs Post-Campaign', level=1)
-            doc.add_picture(img3, width=Inches(6))
-            add_bolded_paragraph(doc, "Observations: ", "Many products saw declines post-campaign.")
-            doc.add_paragraph()
-
-            doc.add_heading('Summary', level=1)
-            p_summary = doc.add_paragraph("Campaign increased sales for many products but not all gains were sustained post-campaign.")
-            for run in p_summary.runs:
-                run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-
-            doc_io = io.BytesIO(); doc.save(doc_io); doc_io.seek(0)
-            st.success("Sales amount executive summary ready.")
-            st.download_button(
-                "Download Sales Amount Executive Summary (.docx)",
-                data=doc_io.getvalue(),
-                file_name="Pre_During_Post_Campaign_Sales_Executive_Summary.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-        except Exception as e:
-            st.error(f"Failed to generate Sales Amount document: {e}")
 
 # ---------------- Demographics ----------------
 def demographics_page():
@@ -1019,51 +459,35 @@ def demographics_page():
     top_age_group = age_means.idxmax(); top_age_pct = age_means.max()
 
     # Plots
-    def plot_day_of_week():
-        fig, ax = plt.subplots(figsize=(8,4.5), constrained_layout=True)
-        bars = ax.bar(days, day_means, color=plt.cm.Paired.colors[:len(days)])
-        ax.set_ylabel('Share of Shoppers (%)'); ax.set_title('Shoppers by Day of Week (Average % Split)')
-        ax.set_ylim(0, max(day_means)*1.15)
-        ax.tick_params(axis='x', rotation=0)
-        for bar in bars:
-            ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+0.5, f"{bar.get_height():.1f}%", ha='center', va='bottom', fontsize=8)
-        return fig
+    st.subheader("Shoppers by Day of Week (Average % Split)")
+    day_data = pd.DataFrame({
+        'Day': days,
+        'Share (%)': day_means.values
+    })
+    st.bar_chart(day_data.set_index('Day'), height=400)
 
-    def plot_gender_pie():
-        fig, ax = plt.subplots(figsize=(5,5), constrained_layout=True)
-        ax.pie(gender_means, labels=gender_means.index, autopct='%1.0f%%', colors=['#6baed6','#fd8d3c'], startangle=90, textprops={'fontsize': 10})
-        ax.set_title('Gender Breakdown (Average % Split)')
-        return fig
+    st.markdown(f"**Key Findings - Day of Week:**")
+    st.markdown(f"- Shopper activity peaked on **{top_day}** ({top_day_pct:.1f}%) and was lowest on **{low_day}** ({low_day_pct:.1f}%).")
+    st.markdown(f"- Friday had the highest activity ({top_day_pct:.1f}%).")
 
-    def plot_age_groups():
-        fig, ax = plt.subplots(figsize=(9,4.5), constrained_layout=True)
-        bar_colors = plt.cm.Set2.colors[:len(age_groups)]
-        bars = ax.bar(age_groups, age_means, color=bar_colors)
-        ax.set_ylabel('Share of Shoppers (%)'); ax.set_title('Age Breakdown (Average % Split)')
-        ax.set_ylim(0, max(age_means)*1.15)
-        for bar in bars:
-            ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+0.5, f"{bar.get_height():.1f}%", ha='center', va='bottom', fontsize=8)
-        return fig
+    st.subheader("Gender Breakdown (Average % Split)")
+    gender_data = pd.DataFrame({
+        'Gender': genders,
+        'Share (%)': gender_means.values
+    })
+    st.bar_chart(gender_data.set_index('Gender'), height=400)
 
-    col1, col2 = st.columns([2,1])
-    with col1:
-        st.subheader("Shoppers by Day of Week")
-        fig_day = plot_day_of_week()
-        st.pyplot(fig_day)
-        st.markdown(f"**Key Findings - Day of Week:**")
-        st.markdown(f"- Shopper activity peaked on **{top_day}** ({top_day_pct:.1f}%) and was lowest on **{low_day}** ({low_day_pct:.1f}%).")
-        st.markdown(f"- Friday had the highest activity ({top_day_pct:.1f}%).")
-    with col2:
-        st.subheader("Gender Breakdown")
-        fig_gender = plot_gender_pie()
-        st.pyplot(fig_gender)
-        st.markdown(f"**Key Findings - Gender:**")
-        st.markdown(f"- Female shoppers represented **{female_pct:.1f}%** of the total, with males at **{male_pct:.1f}%**.")
-        st.markdown(f"- Female shoppers made up {female_pct:.1f}% of shoppers.")
+    st.markdown(f"**Key Findings - Gender:**")
+    st.markdown(f"- Female shoppers represented **{female_pct:.1f}%** of the total, with males at **{male_pct:.1f}%**.")
+    st.markdown(f"- Female shoppers made up {female_pct:.1f}% of shoppers.")
 
-    st.subheader("Age Breakdown")
-    fig_age = plot_age_groups()
-    st.pyplot(fig_age)
+    st.subheader("Age Breakdown (Average % Split)")
+    age_data = pd.DataFrame({
+        'Age Group': age_groups,
+        'Share (%)': age_means.values
+    })
+    st.bar_chart(age_data.set_index('Age Group'), height=400)
+
     st.markdown(f"**Key Findings - Age:**")
     st.markdown(f"- The largest age group was **{top_age_group}** ({top_age_pct:.1f}%).")
 
@@ -1071,68 +495,6 @@ def demographics_page():
     st.markdown(f"- The demographic analysis reveals patterns that should inform timing, targeting, and messaging of future campaigns.")
     st.markdown(f"- Focus on peak shopping days like **{top_day}** for campaign launches.")
     st.markdown(f"- Tailor messaging to resonate with the dominant **{top_age_group}** age group.")
-
-    if st.button("Generate Demographics Executive Summary (.docx)"):
-        try:
-            img_day = save_fig_to_bytes(fig_day)
-            img_gender = save_fig_to_bytes(fig_gender)
-            img_age = save_fig_to_bytes(fig_age)
-
-            doc = Document(); doc_style_setup(doc)
-            title = doc.add_heading('Executive Summary: Shopper Demographics During Campaign', 0)
-            title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-            intro = (
-                "This executive summary provides a concise overview of shopper demographics during the campaign period."
-            )
-            p_intro = doc.add_paragraph(intro)
-            for run in p_intro.runs:
-                run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            doc.add_heading('Key Findings', level=1)
-            key_findings = [
-                f"• Shopper activity peaked on {top_day} ({top_day_pct:.1f}%) and was lowest on {low_day} ({low_day_pct:.1f}%).",
-                f"• Female shoppers represented {female_pct:.1f}% of the total, with males at {male_pct:.1f}%.",
-                f"• The largest age group was {top_age_group} ({top_age_pct:.1f}%)."
-            ]
-            for finding in key_findings:
-                p = doc.add_paragraph(finding)
-                for run in p.runs:
-                    run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-            doc.add_paragraph()
-
-            doc.add_heading('Shoppers by Day of Week', level=1)
-            doc.add_picture(img_day, width=Inches(6))
-            add_bolded_paragraph(doc, "Observations: ", f"Friday had the highest activity ({top_day_pct:.1f}%).")
-            doc.add_paragraph()
-
-            doc.add_heading('Gender Breakdown', level=1)
-            doc.add_picture(img_gender, width=Inches(4))
-            add_bolded_paragraph(doc, "Observations: ", f"Female shoppers made up {female_pct:.1f}% of shoppers.")
-            doc.add_paragraph()
-
-            doc.add_heading('Age Breakdown', level=1)
-            doc.add_picture(img_age, width=Inches(6))
-            add_bolded_paragraph(doc, "Observations: ", f"The largest age group was {top_age_group} ({top_age_pct:.1f}%).")
-            doc.add_paragraph()
-
-            doc.add_heading('Summary', level=1)
-            p_summary = doc.add_paragraph(
-                "The demographic analysis reveals patterns that should inform timing, targeting, and messaging of future campaigns."
-            )
-            for run in p_summary.runs:
-                run.font.name = 'Aptos'; run.font.size = Pt(9); run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
-
-            doc_io = io.BytesIO(); doc.save(doc_io); doc_io.seek(0)
-            st.success("Demographics executive summary ready.")
-            st.download_button(
-                "Download Demographics Executive Summary (.docx)",
-                data=doc_io.getvalue(),
-                file_name="Shopper_Demographics_Executive_Summary.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-        except Exception as e:
-            st.error(f"Failed to generate Demographics document: {e}")
 
 # ---------------- Main App ----------------
 def main():
