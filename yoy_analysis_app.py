@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import openpyxl
+# import openpyxl
 
 
 st.set_page_config(page_title="PepsiCo Campaign Analysis Dashboard - 14 May 2025 to 14 August 2025", layout="wide")
